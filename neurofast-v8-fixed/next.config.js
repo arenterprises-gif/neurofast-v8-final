@@ -15,6 +15,20 @@ const nextConfig = {
     "@sentry/nextjs",
     "@supabase/supabase-js",
   ],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        net: false,
+        tls: false,
+        perf_hooks: false,
+        fs: false,
+        dns: false,
+        child_process: false,
+      };
+    }
+    return config;
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co" },
