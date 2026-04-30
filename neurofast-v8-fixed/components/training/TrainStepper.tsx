@@ -5,7 +5,7 @@ import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { User } from "@/lib/db/schema";
-import { SUPPORTED_MODELS } from "@/lib/training";
+import { SUPPORTED_MODELS } from "@/lib/models";
 import { LOGISTICS_TEMPLATES, estimateTrainingCost } from "@/lib/training-utils";
 import { Upload, ChevronRight, ChevronLeft, Zap, CheckCircle, AlertTriangle } from "lucide-react";
 import { formatCredits } from "@/lib/utils";
