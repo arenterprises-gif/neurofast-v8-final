@@ -12,10 +12,10 @@ export async function getOrCreateUser() {
   const { userId } = await auth();
 
   if (!userId) {
-    return null;   // ← Yeh important fix
+    return null;
   }
 
-  // Check DB
+  // Check DB for existing user
   const [existingUser] = await db
     .select()
     .from(users)
@@ -28,18 +28,19 @@ export async function getOrCreateUser() {
   // Get Clerk user data
   const clerkUser = await currentUser();
   if (!clerkUser) {
-    return null;   // ← Yeh bhi important fix
+    return null;
   }
 
   const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
   const name = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() || null;
 
+  // Create new user
   const [newUser] = await db.insert(users).values({
     clerkId: userId,
     email,
     name,
     avatarUrl: clerkUser.imageUrl,
-    creditsBalance: 100,   // 100 free credits on signup
+    creditsBalance: 100, // 100 free credits on signup
   }).returning();
 
   return newUser;
