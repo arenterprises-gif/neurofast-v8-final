@@ -229,13 +229,13 @@ export default async function AdminOverviewPage() {
                     )}
                     {log.resourceId && (
                       <span className="font-mono text-muted-foreground ml-2 text-[10px]">
-                        · {log.resource}/{log.resourceId.slice(0, 8)}
+                        · {log.resource}/{String(log.resourceId ?? '').slice(0, 8)}
                       </span>
                     )}
                   </div>
                 </div>
                 <span className="font-mono text-muted-foreground flex-shrink-0 ml-4 text-[10px]">
-                  {formatDate(log.createdAt)}
+                  {formatDate(new Date(log.createdAt))}
                 </span>
               </div>
             ))
