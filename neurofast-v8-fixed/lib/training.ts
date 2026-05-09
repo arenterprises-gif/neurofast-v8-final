@@ -12,6 +12,7 @@ import {
 } from "./db/schema";
 import { eq, and } from "drizzle-orm";
 import { prepareDataset, estimateTrainingCost } from "./training-utils";
+import { getDatasetSignedUrl } from "./supabase"; // ✅ NEW
 
 const TOGETHER_BASE = "https://api.together.xyz/v1";
 
@@ -50,7 +51,7 @@ export const SUPPORTED_MODELS = [
     name: "Llama 3.1 8B Instruct",
     description: "Best for most logistics tasks. Fast inference, cost-effective.",
     paramCount: "8B",
-    costPerMToken: 0.2, // USD per 1M training tokens
+    costPerMToken: 0.2,
     maxContextLength: 8192,
     recommended: true,
   },
@@ -97,7 +98,6 @@ export async function uploadDatasetToTogether(
   jsonlContent: string,
   fileName: string
 ): Promise<string> {
-  // Together API accepts multipart form data for file upload
   const formData = new FormData();
   const blob = new Blob([jsonlContent], { type: "application/octet-stream" });
   formData.append("file", blob, fileName);
@@ -162,7 +162,6 @@ export async function createFineTuneJob(params: CreateJobParams): Promise<{
       epochs: params.epochs,
     });
 
-    // Convert cost to credits: 1 credit = $0.01
     const creditsRequired = Math.ceil(estimatedCost.totalCost * 100);
 
     // 4. Check rate limiting (max 3 concurrent jobs)
@@ -194,15 +193,26 @@ export async function createFineTuneJob(params: CreateJobParams): Promise<{
       };
     }
 
-    // 7. Upload dataset to Together if not already uploaded
+    // 7. ✅ FIXED: Upload dataset to Together using signed URL (private bucket safe)
     let togetherFileId = dataset.togetherFileId;
     if (!togetherFileId) {
-      // Fetch dataset content from Supabase
-      const fileRes = await fetch(dataset.fileUrl);
-      const jsonlContent = await fileRes.text();
+      let jsonlContent: string;
+
+      if (dataset.filePath) {
+        // Private bucket: generate fresh signed URL
+        const signedUrl = await getDatasetSignedUrl(dataset.filePath);
+        const fileRes = await fetch(signedUrl);
+        if (!fileRes.ok) throw new Error(`Failed to fetch dataset: ${fileRes.status}`);
+        jsonlContent = await fileRes.text();
+      } else {
+        // Legacy fallback: old public URL records
+        const fileRes = await fetch(dataset.fileUrl);
+        if (!fileRes.ok) throw new Error(`Failed to fetch dataset: ${fileRes.status}`);
+        jsonlContent = await fileRes.text();
+      }
+
       togetherFileId = await uploadDatasetToTogether(jsonlContent, dataset.fileName);
 
-      // Save Together file ID
       await db
         .update(datasets)
         .set({ togetherFileId })
@@ -230,7 +240,6 @@ export async function createFineTuneJob(params: CreateJobParams): Promise<{
 
     // 9. Deduct credits atomically
     await db.transaction(async (tx) => {
-      // Deduct from user balance
       await tx
         .update(users)
         .set({
@@ -241,7 +250,6 @@ export async function createFineTuneJob(params: CreateJobParams): Promise<{
         })
         .where(eq(users.id, params.userId));
 
-      // Log credit transaction
       await tx.insert(creditTransactions).values({
         userId: params.userId,
         type: "deduction",
@@ -252,7 +260,6 @@ export async function createFineTuneJob(params: CreateJobParams): Promise<{
         metadata: { jobId: togetherJob.id, estimatedCost },
       });
 
-      // Create job record
       await tx.insert(trainingJobs).values({
         userId: params.userId,
         datasetId: params.datasetId,
@@ -303,7 +310,6 @@ export async function pollJobStatus(togetherJobId: string): Promise<TogetherJobS
 
 // ─── SYNC JOB STATUS TO DB ────────────────────────────────────────────────────
 export async function syncJobStatus(togetherJobId: string): Promise<void> {
-  // Get current job from DB
   const [job] = await db
     .select()
     .from(trainingJobs)
@@ -311,10 +317,8 @@ export async function syncJobStatus(togetherJobId: string): Promise<void> {
 
   if (!job) return;
 
-  // Fetch status from Together
   const status = await pollJobStatus(togetherJobId);
 
-  // Build log entries from events
   const newLogs = (status.events ?? []).map(
     (e) =>
       `[${new Date(e.created_at * 1000).toISOString()}] [${e.level.toUpperCase()}] ${e.message}`
@@ -323,7 +327,6 @@ export async function syncJobStatus(togetherJobId: string): Promise<void> {
   const existingLogs = (job.logs as string[]) ?? [];
   const allLogs = [...existingLogs, ...newLogs.filter((l) => !existingLogs.includes(l))];
 
-  // Map Together status to our status
   const mappedStatus = status.status === "pending" ? "queued" : status.status;
 
   const updateData: Partial<typeof trainingJobs.$inferInsert> = {
@@ -334,17 +337,14 @@ export async function syncJobStatus(togetherJobId: string): Promise<void> {
     updatedAt: new Date(),
   };
 
-  // Calculate progress
   if (status.epochs_completed && job.epochs) {
     updateData.progressPercent = Math.round((status.epochs_completed / job.epochs) * 100);
   }
 
-  // Handle completion
   if (status.status === "completed" && status.model_output_name) {
     updateData.completedAt = new Date();
     updateData.progressPercent = 100;
 
-    // Create fine-tuned model record
     const [newModel] = await db
       .insert(fineTunedModels)
       .values({
@@ -365,14 +365,12 @@ export async function syncJobStatus(togetherJobId: string): Promise<void> {
     updateData.logs = JSON.stringify(allLogs);
   }
 
-  // Handle failure — refund credits if < 2 min
   if (status.status === "failed") {
     updateData.completedAt = new Date();
     updateData.errorMessage = "Training job failed on Together AI servers.";
     allLogs.push(`[${new Date().toISOString()}] ❌ Training failed.`);
     updateData.logs = JSON.stringify(allLogs);
 
-    // Refund if failed within 2 minutes of creation
     const createdAt = new Date(job.createdAt).getTime();
     const now = Date.now();
     if (now - createdAt < 2 * 60 * 1000 && job.creditsDeducted > 0) {
