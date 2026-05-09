@@ -5,16 +5,13 @@ import { createClient } from "@supabase/supabase-js";
 
 // Server-side client with service role key (full access)
 export function createServerSupabase() {
-  // v8 fix: guard missing env vars — fail fast with clear message
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("[NeuroFast] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set.");
   }
   return createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
-    {
-      auth: { persistSession: false },
-    }
+    { auth: { persistSession: false } }
   );
 }
 
@@ -26,7 +23,20 @@ export function createPublicSupabase() {
   return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 }
 
-// Upload dataset file to Supabase Storage
+// ✅ NEW: Generate signed URL for private bucket (1 hour expiry)
+export async function getDatasetSignedUrl(filePath: string): Promise<string> {
+  const supabase = createServerSupabase();
+  const { data, error } = await supabase.storage
+    .from("neurofast-datasets")
+    .createSignedUrl(filePath, 3600);
+
+  if (error || !data) {
+    throw new Error(`[NeuroFast] Signed URL error: ${error?.message}`);
+  }
+  return data.signedUrl;
+}
+
+// ✅ UPDATED: Returns signed URL + path (path saved to DB for future signed URLs)
 export async function uploadDatasetFile(
   userId: string,
   fileName: string,
@@ -36,7 +46,7 @@ export async function uploadDatasetFile(
   const timestamp = Date.now();
   const path = `datasets/${userId}/${timestamp}-${fileName}`;
 
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from("neurofast-datasets")
     .upload(path, content, {
       contentType: "application/x-jsonlines",
@@ -45,16 +55,15 @@ export async function uploadDatasetFile(
 
   if (error) throw new Error(`Supabase upload error: ${error.message}`);
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("neurofast-datasets").getPublicUrl(path);
-
-  return { url: publicUrl, path };
+  const signedUrl = await getDatasetSignedUrl(path);
+  return { url: signedUrl, path };
 }
 
 // Delete dataset file
 export async function deleteDatasetFile(path: string): Promise<void> {
   const supabase = createServerSupabase();
-  const { error } = await supabase.storage.from("neurofast-datasets").remove([path]);
+  const { error } = await supabase.storage
+    .from("neurofast-datasets")
+    .remove([path]);
   if (error) throw new Error(`Supabase delete error: ${error.message}`);
 }
