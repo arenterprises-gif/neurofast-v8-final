@@ -74,7 +74,7 @@ export default function TrainStepper({ user }: StepProps) {
     if (!file) return;
     setUploadFile(file);
     setUploadError(null);
-    const suffix = file.name.replace(/\.[^.]+$/, "").slice(0, 30).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    const suffix = file.name.replace(/\.[^.]+$/, "").slice(0, 27).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
     setConfig((c) => ({ ...c, modelSuffix: `neurofast-${suffix}-v1`, datasetName: file.name }));
   };
 
@@ -368,11 +368,12 @@ export default function TrainStepper({ user }: StepProps) {
                 <input
                   type="text"
                   value={config.modelSuffix}
+                  maxLength={40}
                   onChange={(e) => setConfig((c) => ({ ...c, modelSuffix: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") }))}
                   className="w-full bg-void-400 border border-white/10 rounded px-3 py-2 font-mono text-sm text-white focus:outline-none focus:border-cyan-neon/40"
                   placeholder="neurofast-fleet-v1"
                 />
-                <p className="font-mono text-[10px] text-muted-foreground mt-1">Lowercase, hyphens only. Max 30 chars.</p>
+                <p className="font-mono text-[10px] text-muted-foreground mt-1">Lowercase, hyphens only. Max 40 chars. ({config.modelSuffix.length}/40)</p>
               </div>
 
               {/* Epochs */}
