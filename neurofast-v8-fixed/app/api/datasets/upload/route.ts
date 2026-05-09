@@ -6,6 +6,8 @@
 //   + applyRateLimit() — upload limiter (10/min)
 //   + auditInfo()      — logs every upload
 //   Existing upload + validation logic: unchanged
+// UPGRADE LOG (v3):
+//   + filePath saved to DB — enables private bucket signed URL access
 
 import { NextRequest, NextResponse } from "next/server";
 import { getUserForApi } from "@/lib/auth";
@@ -64,7 +66,8 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { url } = await uploadDatasetFile(user.id, fileName, jsonlContent);
+  // ✅ FIXED: Destructure both url AND path
+  const { url, path } = await uploadDatasetFile(user.id, fileName, jsonlContent);
 
   const [dataset] = await db
     .insert(datasets)
@@ -73,6 +76,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       name: fileName.replace(/\.[^.]+$/, ""),
       fileName,
       fileUrl: url,
+      filePath: path,   // ✅ NEW: Save storage path for signed URL generation
       fileSizeBytes: new Blob([jsonlContent]).size,
       format: "jsonl",
       rowCount,
