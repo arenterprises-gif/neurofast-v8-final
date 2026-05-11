@@ -4,8 +4,8 @@
 
 // ─── QUEUE NAMES ─────────────────────────────────────────────────────────────
 export const QUEUE_NAMES = {
-  TRAINING: "neurofast:training",
-  TRAINING_DLQ: "neurofast:training:dlq", // dead-letter queue — jobs that exhausted retries
+  TRAINING: "neurofast-training",
+  TRAINING_DLQ: "neurofast-training-dlq", // dead-letter queue — jobs that exhausted retries
 } as const;
 
 // ─── IDEMPOTENCY ──────────────────────────────────────────────────────────────
