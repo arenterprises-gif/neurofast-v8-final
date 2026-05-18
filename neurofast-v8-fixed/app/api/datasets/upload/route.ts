@@ -59,7 +59,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "No file or template provided" }, { status: 400 });
   }
 
-  if (!templateId && rowCount < 10) {
+  if (!templateId && rowCount < 1) {
     return NextResponse.json(
       { error: "Dataset must have at least 10 training examples" },
       { status: 400 }
