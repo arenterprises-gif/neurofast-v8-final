@@ -243,7 +243,7 @@ neurofast-ai-trainer/
 
 ---
 
-## 📞 Support
+## 📞 Support clerkneu@gamil.com
 
 Built by the NeuroFast team. For issues or integrations, contact: support@neurofast.in
 
